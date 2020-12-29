@@ -24,8 +24,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UIController {
 
-    private final HostServices hostServices;
-
     private final Week2 week2;
 
     @FXML
@@ -41,7 +39,7 @@ public class UIController {
     public void initialize() {
         button.setOnAction(event -> {
             Integer text = Integer.valueOf(imagenumber.getText());
-            int[] pixels = week2.getImageData(text);
+            int[] pixels = week2.getTrainingSetImage(text);
             byte[] pixelBytes = new byte[pixels.length];
             for(int i=0; i<pixels.length; i++) {
                 pixelBytes[i] = (byte) pixels[i];

@@ -21,13 +21,11 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Used lib from https://github.com/jamesmudd/jhdf for parsing h5
  */
-@Service
 @Slf4j
-@RequiredArgsConstructor
 public class H5Reader {
 
     @SneakyThrows
-    public Map<String, Object> readH5(Resource resource) {
+    public static Map<String, Object> readH5(Resource resource) {
         log.info("Loading h5 data from {}", resource.getURL());
  
         Map<String, Object> datasets = new HashMap<>();
