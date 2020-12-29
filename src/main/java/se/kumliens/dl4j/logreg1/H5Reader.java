@@ -4,6 +4,7 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 
@@ -25,9 +26,9 @@ public class H5Reader {
     private final ResourceLoader resourceLoader;
 
     @SneakyThrows
-    public Map<String, Object> readH5(String fileResource) {
-        log.info("Loading h5 data from {}", fileResource);
-        File file = resourceLoader.getResource(fileResource).getFile();
+    public Map<String, Object> readH5(Resource fileResource) {
+        log.info("Loading h5 data from {}", fileResource.getURL());
+        File file = fileResource.getFile();
         log.info("File {} exists: {}", file.getAbsolutePath(), file.exists());
         Map<String, Object> datasets = new HashMap<>();
         try (HdfFile hdfFile = new HdfFile(file)) {
