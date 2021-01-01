@@ -3,6 +3,7 @@ package se.kumliens.dl4j.logreg1;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.nd4j.linalg.api.ndarray.INDArray;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
@@ -22,6 +23,8 @@ class Week2Test {
 
     int imgSize = 3 * 64 * 64;
 
+    double epsilon = 0.000001d;
+
     @Test
     @DisplayName("Verify correct reshaping of training data")
     public void testReshapeTrainingSet() {
@@ -38,6 +41,27 @@ class Week2Test {
         assertEquals(2, shape.length, "The shape should have two dims");
         assertEquals(imgSize, shape[0]);
         assertEquals(noOfTestImages, shape[1]);
+    }
+
+    @Test
+    @DisplayName("Verify correct reshaping of img data for three 3*3 rgb images")
+    public void testReshape(){
+        int[][][][] imgData = new int[][][][]{
+                {new int[][]{{0,1,2},{3,4,5}, {6,7,8}}},
+                {new int[][]{{10,11,12},{13,14,15}, {16,17,18}}},
+                {new int[][]{{20,21,22},{23,24,25}, {26,27,28}}},
+        };
+        long[] newShape = new long[]{3*3, imgData.length};
+        try (INDArray result = week2.reshapeImgDataAndStandardize(imgData, newShape)) {
+            for(int imgIx=0; imgIx<imgData.length; imgIx++) {
+                INDArray c1 = result.getColumn(imgIx);
+                System.out.println("Check img " + imgIx + " with data " + c1);
+                for(int i=0; i<9; i++) {
+                    double d = c1.getDouble(i);
+                    assertEquals(Double.valueOf(i + (imgIx*10)) / 255, d, epsilon);
+                }
+            }
+        }
     }
 
     @Test

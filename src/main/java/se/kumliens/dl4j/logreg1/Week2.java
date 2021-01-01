@@ -5,7 +5,6 @@ import java.util.Map;
 import javax.annotation.PostConstruct;
 
 import org.nd4j.common.util.ArrayUtil;
-import org.nd4j.linalg.api.buffer.DataType;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,7 +59,7 @@ public class Week2 {
      * @see <a href="https://github.com/jamesmudd/jhdf">jHDF - used to read
      *      hdf5-files</a>
      *
-     *      Load training and test sets
+     * Load training and test sets
      */
     @PostConstruct
     public void init() {
@@ -75,28 +74,40 @@ public class Week2 {
         trainSetYOrig = (long[]) training_set.get("train_set_y");
         testSetXOrig = (int[][][][]) test_set.get("test_set_x");
         testSetYOrig = (long[]) test_set.get("test_set_y");
+        reshapeTestSetAndStandardize();
+        reshapeTrainingSetAndStandardize();
     }
 
     public long[] reshapeTrainingSetAndStandardize() {
-        int[] flat = ArrayUtil.flatten(trainSetXOrig);
-        log.info("Number of training images: {}", trainSetXOrig.length);
         long[] shape = new long[] {64*64*3, trainSetXOrig.length};
-        try (INDArray array = Nd4j.create(flat, shape, DataType.INT32)) {
-            trainingSet = array.div(255);
-        }
-        log.info("The shape of the training set is {}", trainingSet.shapeDescriptor());
+        trainingSet = reshapeImgDataAndStandardize(trainSetXOrig, shape);
+        log.info("Trainingset has {} columns (images) and {} rows", trainingSet.columns(), trainingSet.rows());
         return trainingSet.shape();
     }
 
     public long[] reshapeTestSetAndStandardize() {
-        int[] flat = ArrayUtil.flatten(testSetXOrig);
-        log.info("Number of test images: {}", testSetXOrig.length);
         long[] shape = new long[] {64*64*3, testSetXOrig.length};
-        try (INDArray array = Nd4j.create(flat, shape, DataType.INT32)) {
-            testSet = array.div(255);
-        }
-        log.info("The shape of the test set is {}", testSet.shapeDescriptor());
+        testSet = reshapeImgDataAndStandardize(testSetXOrig, shape);
+        log.info("Testset has {} columns (images) and {} rows", testSet.columns(), testSet.rows());
         return testSet.shape();
+    }
+
+
+    /**
+     * Reshape the provided data and 'standardize' it by dividing all values with 255.
+     * It's the responsibility of the client to close the returned {@link INDArray}
+     *
+     * @param imgData four dim int array with image data
+     * @param newShape the new shape
+     * @return A new (still open) {@link INDArray} with the reshaped data.
+     */
+    public INDArray reshapeImgDataAndStandardize(int[][][][] imgData, long[] newShape) {
+        int[] flat = ArrayUtil.flatten(imgData);
+        Nd4j.create(newShape, 'c');
+        try (INDArray array = Nd4j.create(newShape, 'f')) {
+            array.data().setData(flat);
+            return array.div(255);
+        }
     }
 
     public int get_m_train() {
@@ -118,6 +129,7 @@ public class Week2 {
      */
     public int[] getTrainingSetImage(int ix) {
         if (ix > -1 && ix < trainSetXOrig.length) {
+            log.info("Returning training image with ix {}", ix);
             return ArrayUtil.flatten(trainSetXOrig[ix]);
         }
         log.warn("Invalid index {}, must be a number between 0 and {}", ix, trainSetXOrig.length);

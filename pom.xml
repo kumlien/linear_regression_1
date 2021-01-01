@@ -162,8 +162,6 @@
             <artifactId>jhdf</artifactId>
             <version>0.5.10</version>
         </dependency>
-
-
     </dependencies>
 
     <build>

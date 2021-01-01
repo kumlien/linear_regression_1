@@ -24,6 +24,12 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class H5Reader {
 
+    /**
+     * Read a h5 file and return the data as a {@link Map} with {@link Node} name
+     * as key and the {@link Dataset} as value.
+     *
+     * @param resource
+     */
     @SneakyThrows
     public static Map<String, Object> readH5(Resource resource) {
         log.info("Loading h5 data from {}", resource.getURL());
