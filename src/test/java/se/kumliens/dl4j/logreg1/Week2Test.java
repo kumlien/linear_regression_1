@@ -3,10 +3,14 @@ package se.kumliens.dl4j.logreg1;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.nd4j.linalg.api.buffer.DataType;
 import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.factory.Nd4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
+
+import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -23,7 +27,7 @@ class Week2Test {
 
     int imgSize = 3 * 64 * 64;
 
-    double epsilon = 0.000001d;
+    double epsilon = 0.0001d;
 
     @Test
     @DisplayName("Verify correct reshaping of training data")
@@ -80,5 +84,36 @@ class Week2Test {
     @DisplayName("Verify height (and width) of the images")
     void get_num_px() {
         assertEquals(64, week2.getImageWidthAndHeigth());
+    }
+
+    @Test
+    @DisplayName("Verify correct sigmoid behaviour")
+    public void testSigmoid() {
+        INDArray z = Nd4j.createFromArray(new double[]{0,2});
+        INDArray s = week2.sigmoid(z);
+        assertEquals(0.5, s.data().getDouble(0), epsilon);
+        assertEquals(0.8808, s.data().getDouble(1), epsilon);
+    }
+
+    @Test
+    @DisplayName("Make sure weights are initialized")
+    public void testWeightInit() {
+        week2.initializeWeights();
+        assertEquals(0, week2.getB());
+        assertEquals(3*64*64, week2.getW().shape()[0]);
+        assertEquals(1, week2.getW().shape()[1]);
+    }
+
+    @Test
+    @DisplayName("Verify the forward prop step")
+    public void testForwardProp() {
+        INDArray w = Nd4j.create(new double[]{1.0, 2.0}, new int[]{2, 1});
+        double b = 2.0;
+        INDArray X = Nd4j.create(new double[][]{{1.0, 2.0, -1.0},{3.0, 4.0, -3.2}});
+        INDArray Y = Nd4j.create(DataType.DOUBLE, 3,1);
+        Y.data().setData(new int[]{1,0,1});
+        BigDecimal cost = week2.doPropagate(w, b, X, Y);
+        assertEquals(5.80181093592113, cost.doubleValue(), epsilon);
+        week2.propagate();
     }
 }

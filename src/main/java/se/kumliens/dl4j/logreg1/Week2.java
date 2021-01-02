@@ -1,12 +1,23 @@
 package se.kumliens.dl4j.logreg1;
 
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.util.Arrays;
 import java.util.Map;
+import java.util.Random;
 
 import javax.annotation.PostConstruct;
 
+import lombok.Data;
 import org.nd4j.common.util.ArrayUtil;
+import org.nd4j.linalg.api.buffer.DataType;
 import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.api.ops.impl.loss.LogLoss;
 import org.nd4j.linalg.factory.Nd4j;
+import org.nd4j.linalg.lossfunctions.LossFunctions;
+import org.nd4j.linalg.ops.transforms.Transforms;
+import org.nd4j.weightinit.BaseWeightInitScheme;
+import org.nd4j.weightinit.impl.SigmoidUniformInitScheme;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
@@ -14,9 +25,23 @@ import org.springframework.stereotype.Component;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import static java.math.BigDecimal.valueOf;
+import static org.nd4j.linalg.api.buffer.DataType.DOUBLE;
+import static org.nd4j.linalg.factory.Nd4j.ones;
+import static org.nd4j.linalg.factory.Nd4j.sum;
+import static org.nd4j.linalg.ops.transforms.Transforms.log;
+
+/**
+ * Common steps for pre-processing a new dataset are:
+ *
+ * Figure out the dimensions and shapes of the problem (m_train, m_test, num_px, ...)
+ * Reshape the datasets such that each example is now a vector of size (num_px * num_px * 3, 1)
+ * "Standardize" the data
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@Data
 public class Week2 {
 
     @Value("${classpath:/week2/train_catvnoncat.h5}")
@@ -29,7 +54,7 @@ public class Week2 {
     // respectively
     int[][][][] trainSetXOrig;
 
-    // Labels for the training set
+    // Labels for the training set (Y)
     long[] trainSetYOrig;
 
     int[][][][] testSetXOrig;
@@ -39,9 +64,14 @@ public class Week2 {
     //cat, non-cat
     String[] classes;
 
+    //a.k.a X
     INDArray trainingSet;
 
     INDArray testSet;
+
+    private INDArray w;
+
+    private double b;
 
 
     /**
@@ -65,23 +95,26 @@ public class Week2 {
     public void init() {
         Map<String, Object> training_set = H5Reader.readH5(trainingSetResource);
         Map<String, Object> test_set = H5Reader.readH5(testSetResource);
-        training_set.keySet().forEach(k -> log.info("TrainingSet with key {} and data {}", k,
+        training_set.keySet().forEach(k -> Week2.log.info("TrainingSet with key {} and data {}", k,
                 training_set.get(k).getClass().getSimpleName()));
         test_set.keySet().forEach(
-                k -> log.info("TestSet with key {} and data {}", k, test_set.get(k).getClass().getSimpleName()));
+                k -> Week2.log.info("TestSet with key {} and data {}", k, test_set.get(k).getClass().getSimpleName()));
         classes = (String[]) training_set.get("list_classes");
-        trainSetXOrig = (int[][][][]) training_set.get("train_set_x");
+        //trainSetXOrig = new int[1][][][];
+        //trainSetXOrig[0] = ((int[][][][]) training_set.get("train_set_x"))[0];
+        trainSetXOrig = ((int[][][][]) training_set.get("train_set_x"));
         trainSetYOrig = (long[]) training_set.get("train_set_y");
         testSetXOrig = (int[][][][]) test_set.get("test_set_x");
         testSetYOrig = (long[]) test_set.get("test_set_y");
         reshapeTestSetAndStandardize();
         reshapeTrainingSetAndStandardize();
+        initializeWeights();
     }
 
     public long[] reshapeTrainingSetAndStandardize() {
         long[] shape = new long[] {64*64*3, trainSetXOrig.length};
         trainingSet = reshapeImgDataAndStandardize(trainSetXOrig, shape);
-        log.info("Trainingset has {} columns (images) and {} rows", trainingSet.columns(), trainingSet.rows());
+        Week2.log.info("Trainingset has {} columns (images) and {} rows", trainingSet.columns(), trainingSet.rows());
         return trainingSet.shape();
     }
 
@@ -95,19 +128,73 @@ public class Week2 {
 
     /**
      * Reshape the provided data and 'standardize' it by dividing all values with 255.
+     * Each column represents a flattened image.
      * It's the responsibility of the client to close the returned {@link INDArray}
      *
-     * @param imgData four dim int array with image data
+     * @param imgData four dim int array with image data (dim1=image, dim2, height, dim3 width, dim4 rgb-values)
      * @param newShape the new shape
      * @return A new (still open) {@link INDArray} with the reshaped data.
      */
     public INDArray reshapeImgDataAndStandardize(int[][][][] imgData, long[] newShape) {
         int[] flat = ArrayUtil.flatten(imgData);
-        Nd4j.create(newShape, 'c');
         try (INDArray array = Nd4j.create(newShape, 'f')) {
             array.data().setData(flat);
             return array.div(255);
         }
+    }
+
+    /**
+     * Do a forward propagation by calculating:
+     * <ul>
+     *     <li>weights * X + b</li>
+     *     <li>sigmoid of the above</li>
+     *     <li>loss of the above</li>
+     *     <li>cost as the average of the losses</li>
+     * </ul>
+     */
+    public void propagate() {
+        INDArray Y = Nd4j.create(DOUBLE, trainSetYOrig.length,1);
+        Y.data().setData(trainSetYOrig);
+        doPropagate(w, b, trainingSet, Y);
+    }
+
+    public BigDecimal doPropagate(INDArray w, double b, INDArray X, INDArray Y) {
+        INDArray rawYHat = w.transpose().mmul(X).add(b);
+        INDArray A = sigmoid(rawYHat); //All activations, capital A
+        log.info("A: {}", A.data());
+
+        log.info("Y: {}", Y.data());
+        INDArray logA = log(A);
+        log.info("log(A): {}", logA.data());
+        INDArray left = Y.transpose().mul(logA);
+        log.info("Left: {}", left);
+
+        INDArray right = ones(1).sub(Y.transpose()).mul(log(ones(1).sub(A)));
+        log.info("Right: {}", right);
+
+        double sumLoss = left.add(right).sumNumber().doubleValue();
+        log.info("Total Loss: {}", sumLoss);
+        BigDecimal negAvg = valueOf(-1).divide(valueOf(X.columns()), MathContext.DECIMAL64);
+        log.info("negAvg: {}", negAvg);
+        BigDecimal cost = negAvg.multiply(valueOf(sumLoss));
+        log.info("Cost: {}", cost);
+        return cost;
+    }
+
+    /**
+     * f(x) = 1 / (1 + exp(-x))
+     */
+    public INDArray sigmoid(INDArray z) {
+        return Transforms.sigmoid(z);
+    }
+
+    /**
+     * Init weights with zeros with shape matching training set. Since it contains images it should be 3 * width * height
+     */
+    public void initializeWeights() {
+        BaseWeightInitScheme initScheme = new SigmoidUniformInitScheme('c', trainSetXOrig[0].length * trainSetXOrig[0][0].length * trainSetXOrig[0][0][0].length, 1);
+        w = initScheme.create(DOUBLE, trainSetXOrig[0].length * trainSetXOrig[0][0].length * trainSetXOrig[0][0][0].length, 1);
+        b = 0d;
     }
 
     public int get_m_train() {
@@ -129,10 +216,10 @@ public class Week2 {
      */
     public int[] getTrainingSetImage(int ix) {
         if (ix > -1 && ix < trainSetXOrig.length) {
-            log.info("Returning training image with ix {}", ix);
+            Week2.log.info("Returning training image with ix {}", ix);
             return ArrayUtil.flatten(trainSetXOrig[ix]);
         }
-        log.warn("Invalid index {}, must be a number between 0 and {}", ix, trainSetXOrig.length);
+        Week2.log.warn("Invalid index {}, must be a number between 0 and {}", ix, trainSetXOrig.length);
         return new int[] {};
     }
 }
