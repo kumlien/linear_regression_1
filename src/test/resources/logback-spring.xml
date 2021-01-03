@@ -5,6 +5,10 @@
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </logger>
+    <logger name="org.springframework.test" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </logger>
     <root level="INFO">
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="FILE" />

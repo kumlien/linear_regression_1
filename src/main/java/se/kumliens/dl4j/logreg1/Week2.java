@@ -25,7 +25,9 @@ import org.springframework.stereotype.Component;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.valueOf;
+import static java.math.MathContext.DECIMAL64;
 import static org.nd4j.linalg.api.buffer.DataType.DOUBLE;
 import static org.nd4j.linalg.factory.Nd4j.ones;
 import static org.nd4j.linalg.factory.Nd4j.sum;
@@ -159,25 +161,49 @@ public class Week2 {
     }
 
     public BigDecimal doPropagate(INDArray w, double b, INDArray X, INDArray Y) {
+        BigDecimal oneOverM = valueOf(1).divide(valueOf(X.columns()), DECIMAL64);
+        BigDecimal negOneOverM = oneOverM.negate();
         INDArray rawYHat = w.transpose().mmul(X).add(b);
+        log.info("");
+        log.info("");
+        log.info("ActivationInput shape: {}", rawYHat.shape());
         INDArray A = sigmoid(rawYHat); //All activations, capital A
+        log.info("A shape: {}", A.shape());
         log.info("A: {}", A.data());
 
+        //start loss function
+        //cost = -1/m*np.sum(Y*np.log(A)+ (1-Y)*np.log(1-A))
+        //Left: Y*np.log(A)
         log.info("Y: {}", Y.data());
         INDArray logA = log(A);
         log.info("log(A): {}", logA.data());
         INDArray left = Y.transpose().mul(logA);
         log.info("Left: {}", left);
 
+        //Right: (1-Y)*np.log(1-A)
         INDArray right = ones(1).sub(Y.transpose()).mul(log(ones(1).sub(A)));
         log.info("Right: {}", right);
 
         double sumLoss = left.add(right).sumNumber().doubleValue();
         log.info("Total Loss: {}", sumLoss);
-        BigDecimal negAvg = valueOf(-1).divide(valueOf(X.columns()), MathContext.DECIMAL64);
-        log.info("negAvg: {}", negAvg);
-        BigDecimal cost = negAvg.multiply(valueOf(sumLoss));
+
+        BigDecimal cost = negOneOverM.multiply(valueOf(sumLoss));
         log.info("Cost: {}", cost);
+
+
+        //dw = (1 / m) * np.dot(X, (A - Y).T)
+        //db = (1 / m) * np.sum(A - Y)
+        log.info("Y.shape: {}", Y.shape());
+        log.info("A.shape: {}", A.shape());
+        INDArray diff = A.sub(Y.transpose());
+        log.info("diff.shape: {}", A.shape());
+        log.info("X.shape: {}", X.shape());
+
+        INDArray dw = X.mmul(diff.transpose()).mul(oneOverM.doubleValue());
+        log.info("dw: {}", dw.data());
+        double db = oneOverM.multiply(valueOf(A.sub(Y.transpose()).sumNumber().doubleValue())).doubleValue();
+        log.info("db: {}", db);
+
         return cost;
     }
 
